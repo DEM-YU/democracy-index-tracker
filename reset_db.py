@@ -43,6 +43,20 @@ def main() -> None:
     finally:
         db.close()
 
+    # 4. Seed initial dataset if available
+    csv_path = Path("data/electoral-democracy-index.csv")
+    if csv_path.exists():
+        from app.services.data_import import import_democracy_csv
+
+        db = SessionLocal()
+        try:
+            print(f"Importing initial dataset from {csv_path}...")
+            result = import_democracy_csv(db, str(csv_path))
+            print(f"Data import complete: {result['created']} records created.")
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     main()
+

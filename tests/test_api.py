@@ -300,15 +300,17 @@ def test_import_skips_invalid_index(
         db.close()
 
 
-def test_import_skips_rows_without_code(
+def test_import_skips_rows_without_code_and_aggregates(
     tmp_path, client: TestClient, test_engine
 ) -> None:
-    """Rows with an empty Code column (OWID aggregates) are silently skipped."""
+    """Rows with an empty Code column or OWID aggregate codes are silently skipped."""
     csv_file = tmp_path / "aggregates.csv"
     csv_file.write_text(
         "Entity,Code,Year,Electoral Democracy Index,World region according to OWID\n"
-        "World,,2023,0.45,World\n"          # aggregate → skip
-        "Sweden,SWE,2023,0.92,Europe\n",    # country  → import
+        "NoCodeGroup,,2023,0.45,World\n"           # empty code → skip
+        "World,OWID_WRL,2023,0.45,\n"              # OWID aggregate code → skip
+        "Africa,OWID_AFR,2023,0.35,\n"             # OWID aggregate code → skip
+        "Sweden,SWE,2023,0.92,Europe\n",           # country → import
         encoding="utf-8",
     )
     Session = sessionmaker(bind=test_engine)
@@ -317,7 +319,10 @@ def test_import_skips_rows_without_code(
         result = import_democracy_csv(db, str(csv_file))
         assert result["created"] == 1   # only Sweden
         from app.models import Country
+        assert db.query(Country).filter_by(name="NoCodeGroup").first() is None
         assert db.query(Country).filter_by(name="World").first() is None
+        assert db.query(Country).filter_by(name="Africa").first() is None
         assert db.query(Country).filter_by(name="Sweden").first() is not None
     finally:
         db.close()
+

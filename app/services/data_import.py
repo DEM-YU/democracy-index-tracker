@@ -27,6 +27,39 @@ _REQUIRED_COLUMNS = {
 
 
 # ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# OWID continental and global aggregates that should not be treated as individual countries
+AGGREGATE_CODES = {
+    "OWID_WRL",  # World
+    "OWID_AFR",  # Africa
+    "OWID_ASI",  # Asia
+    "OWID_EUR",  # Europe
+    "OWID_NAM",  # North America
+    "OWID_SAM",  # South America
+    "OWID_OCE",  # Oceania
+}
+
+# Fallback geographic regions for historical states that lack region labels in OWID CSV
+HISTORICAL_REGION_FALLBACKS = {
+    "Baden": "Europe",
+    "Bavaria": "Europe",
+    "Hanover": "Europe",
+    "Hesse Electoral": "Europe",
+    "Hesse Grand Ducal": "Europe",
+    "Mecklenburg Schwerin": "Europe",
+    "Saxony": "Europe",
+    "Modena": "Europe",
+    "Parma": "Europe",
+    "Tuscany": "Europe",
+    "Two Sicilies": "Europe",
+    "Somaliland": "Africa",
+    "Zanzibar": "Africa",
+}
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -76,6 +109,7 @@ def import_democracy_csv(db: Session, file_path: str) -> dict[str, int]:
     * ``Electoral Democracy Index`` is blank or non-numeric (e.g. ``"-"``).
     * ``Code`` column is present **and** the value is empty — this filters
       OWID regional / global aggregates that lack a country code.
+    * ``Code`` is an OWID aggregate code (e.g. ``OWID_WRL``, ``OWID_AFR``).
 
     Args:
         db: An active SQLAlchemy session.  The caller is responsible for
@@ -107,12 +141,17 @@ def import_democracy_csv(db: Session, file_path: str) -> dict[str, int]:
         has_code_column = "Code" in fieldnames
 
         for row in reader:
-            # Skip OWID aggregate rows (no ISO code)
-            if has_code_column and not row.get("Code", "").strip():
+            code = row.get("Code", "").strip() if has_code_column else ""
+
+            # Skip OWID aggregate rows (no code, or explicit continent/world aggregate code)
+            if has_code_column and (not code or code in AGGREGATE_CODES):
                 continue
 
             country_name = row["Entity"].strip()
             region = row["World region according to OWID"].strip()
+            if not region:
+                region = HISTORICAL_REGION_FALLBACKS.get(country_name, "")
+
             year_raw = row["Year"].strip()
             index_raw = row["Electoral Democracy Index"].strip()
 
